@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Patient, LogEntry } from '../types';
 import { MedicineItem } from './MedicineItem';
 
@@ -10,12 +10,25 @@ interface PatientCalendarProps {
 }
 
 export const PatientCalendar: React.FC<PatientCalendarProps> = ({ patient, logs, onToggle }) => {
-  const [selectedDay, setSelectedDay] = useState(13); // Default to starting day
+  // Determine if today falls within our active range (May 13 - May 25, 2024)
+  const initialDay = useMemo(() => {
+    const now = new Date();
+    const isMay2024 = now.getFullYear() === 2024 && now.getMonth() === 4; // 4 is May
+    const day = now.getDate();
+    
+    if (isMay2024 && day >= 13 && day <= 25) {
+      return day;
+    }
+    // Default to 14 as per user's "today is the 14th" note if outside range or for current session
+    return 14; 
+  }, []);
+
+  const [selectedDay, setSelectedDay] = useState(initialDay);
 
   const days = Array.from({ length: 13 }, (_, i) => 13 + i); // 13th to 25th
 
   const getDayOfWeek = (day: number) => {
-    // Note: May 2024. May 1st was Wednesday.
+    // May 2024
     const d = new Date(2024, 4, day); 
     return d.toLocaleDateString('en-US', { weekday: 'short' });
   };
@@ -34,13 +47,17 @@ export const PatientCalendar: React.FC<PatientCalendarProps> = ({ patient, logs,
   };
 
   const activeMedications = patient.medications.filter(med => {
-    const dayIndex = selectedDay - 13;
-    // Nurofen is special: scheduled for 2 days, then as needed.
-    if (med.id === 'e6') {
-      return true; // Always show for logging purposes since it transitions to as-needed
-    }
-    return dayIndex < med.durationDays;
+    const dayFromStart = selectedDay - 13;
+    // Nurofen (e6) transitions to "as needed" after 2 days but we show it
+    if (med.isAsNeeded) return true;
+    return dayFromStart < med.durationDays;
   });
+
+  // Check if a specific day is "today"
+  const isToday = (day: number) => {
+    const now = new Date();
+    return now.getFullYear() === 2024 && now.getMonth() === 4 && now.getDate() === day;
+  };
 
   return (
     <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden mb-12">
@@ -60,17 +77,25 @@ export const PatientCalendar: React.FC<PatientCalendarProps> = ({ patient, logs,
         <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-hide">
           {days.map((day) => {
             const isSelected = selectedDay === day;
+            const highlighted = isToday(day);
+            
             return (
               <button
                 key={day}
                 onClick={() => setSelectedDay(day)}
-                className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-20 rounded-2xl border-2 transition-all
+                className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-20 rounded-2xl border-2 transition-all relative
                   ${isSelected 
                     ? (patient.color === 'emerald' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-200' : 'bg-sky-500 border-sky-500 text-white shadow-lg shadow-sky-200')
                     : 'bg-white border-slate-100 text-slate-500 hover:border-slate-300'}`}
               >
+                {highlighted && !isSelected && (
+                  <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${patient.color === 'emerald' ? 'bg-emerald-400' : 'bg-sky-400'}`}></span>
+                )}
                 <span className="text-[10px] uppercase font-bold tracking-wider mb-1">{getDayOfWeek(day)}</span>
                 <span className="text-xl font-bold">{day}</span>
+                {highlighted && (
+                  <span className={`text-[8px] font-black uppercase mt-1 ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>Today</span>
+                )}
               </button>
             );
           })}
